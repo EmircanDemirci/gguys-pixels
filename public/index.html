@@ -78,14 +78,14 @@
     const ctx = canvas.getContext("2d");
 
     const WIDTH = 500, HEIGHT = 500;   // sunucudaki boyut
-    const PIXEL_SIZE = 5;                // gerçek pikseller 1x1 olacak
-    let scale = 1;                       // zoom için
-    let offsetX = 0, offsetY = 0;        // kaydırma için
-    let isDragging = false, startX, startY;
+    const PIXEL_SIZE = 1;               // her hücre 1x1 piksel
+    let scale = 1;                      // zoom için
+    let offsetX = 0, offsetY = 0;       // pan için
+    let isDragging = false, lastMouseX = 0, lastMouseY = 0;
 
-    // Tarayıcı boyutuna ayarla
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Canvas boyutu board ile aynı
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
 
     // Canvas datası (başlangıçta boş)
     let board = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill("#FFFFFF"));
@@ -125,33 +125,30 @@
     // Canvas tıklama → pixel yerleştirme
     canvas.addEventListener("click", (e) => {
       const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-      // scale ve translate’i CSS transform ile uyguluyoruz
-      // o yüzden offsetX/Y mouse hesaplamasına dahil edilmez
-      const mouseX = (e.clientX - rect.left) / scale;
-      const mouseY = (e.clientY - rect.top) / scale;
+      const worldX = Math.floor((mouseX - offsetX) / scale);
+      const worldY = Math.floor((mouseY - offsetY) / scale);
 
-      const x = Math.floor(mouseX);
-      const y = Math.floor(mouseY);
-
-      if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+      if (worldX >= 0 && worldX < WIDTH && worldY >= 0 && worldY < HEIGHT) {
         const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
-        socket.emit("placePixel", { x, y, color });
+        socket.emit("placePixel", { x: worldX, y: worldY, color });
       }
     });
-
 
     // Zoom (mouse wheel)
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
       const zoomFactor = 1.1;
 
-      // Fare konumu container içinde
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const prevScale = scale;
+      // Mevcut ölçekte farenin altındaki dünya koordinatı
+      const worldX = (mouseX - offsetX) / scale;
+      const worldY = (mouseY - offsetY) / scale;
 
       if (e.deltaY < 0) {
         scale *= zoomFactor; // zoom in
@@ -159,42 +156,44 @@
         scale /= zoomFactor; // zoom out
       }
 
-      // Pan’i mouse pozisyonuna göre koru
-      offsetX -= (mouseX / prevScale - mouseX / scale);
-      offsetY -= (mouseY / prevScale - mouseY / scale);
+      // Scale sınırları
+      scale = Math.max(0.2, Math.min(scale, 20));
 
-      updateTransform();
+      // Aynı dünya noktasını farenin altında tut
+      offsetX = mouseX - worldX * scale;
+      offsetY = mouseY - worldY * scale;
+
+      draw();
     });
 
     // Pan (drag)
     canvas.addEventListener("mousedown", (e) => {
       isDragging = true;
-      startX = e.clientX - offsetX;
-      startY = e.clientY - offsetY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
     });
 
     canvas.addEventListener("mousemove", (e) => {
       if (isDragging) {
-        offsetX = e.clientX - startX;
-        offsetY = e.clientY - startY;
-        updateTransform();
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        offsetX += dx;
+        offsetY += dy;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        draw();
       }
     });
 
     canvas.addEventListener("mouseup", () => isDragging = false);
     canvas.addEventListener("mouseleave", () => isDragging = false);
 
-    // CSS transform ile zoom/pan uygula
+    // Artık CSS transform kullanmıyoruz; gerekirse çağrı uyumluluğu için bırakıldı
     function updateTransform() {
-      canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-      canvas.style.transformOrigin = "0 0";
+      draw();
     }
 
-    // Canvas boyutu ekran boyutuna eşit
-    canvas.width = 1000; // board piksel sayısı
-    canvas.height = 1000;
-    canvas.style.width = canvas.width + "px";
-    canvas.style.height = canvas.height + "px";
+    // Canvas boyutu board boyutuna göre ayarlandı (yukarıda)
   </script>
 </body>
 
