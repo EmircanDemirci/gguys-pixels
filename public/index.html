@@ -1,51 +1,201 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
   <meta charset="UTF-8">
-  <title>rPixels</title>
+  <title>GGPixels</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
-    canvas { border: 1px solid #fff; image-rendering: pixelated; cursor: crosshair; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #222;
+    }
+
+    canvas {
+      background: #fff;
+      cursor: crosshair;
+      display: block;
+    }
   </style>
 </head>
-<body>
-  <canvas id="board" width="500" height="500"></canvas>
 
+<body class="bg-gray-100 text-gray-900">
+
+  <!-- NAVBAR -->
+  <nav class="bg-blue-600 text-white p-4 flex justify-between">
+    <div class="font-bold text-lg">GGPixels</div>
+    <ul class="flex space-x-6">
+      <li><a href="#" onclick="showPage('home')" class="hover:underline">Anasayfa</a></li>
+      <li><a href="#" onclick="showPage('canvas')" class="hover:underline">Canvas</a></li>
+      <li><a href="#" onclick="showPage('login')" class="hover:underline">Giriş Yap</a></li>
+    </ul>
+  </nav>
+
+  <!-- SAYFALAR -->
+  <main class="p-6">
+    <!-- Anasayfa -->
+    <section id="home" class="page">
+      <h1 class="text-2xl font-bold mb-4">GGPixels'e Hoşgeldin!</h1>
+      <p class="mb-4">Gerçek zamanlı piksel yerleştirme oyununa hoşgeldiniz 🎨</p>
+      <button onclick="showPage('canvas')" class="px-4 py-2 bg-blue-600 text-white rounded">Canvas'a Git</button>
+    </section>
+
+    <!-- Canvas -->
+    <section id="canvas" class="page hidden flex justify-center">
+      <canvas id="board"></canvas>
+    </section>
+
+    <!-- Login -->
+    <section id="login" class="page hidden max-w-sm mx-auto">
+      <h2 class="text-xl font-bold mb-4">Giriş Yap</h2>
+      <form class="space-y-4">
+        <div>
+          <label class="block">Kullanıcı Adı</label>
+          <input type="text" class="w-full border px-3 py-2 rounded" placeholder="Kullanıcı adı">
+        </div>
+        <div>
+          <label class="block">Şifre</label>
+          <input type="password" class="w-full border px-3 py-2 rounded" placeholder="Şifre">
+        </div>
+        <button type="button" class="w-full bg-blue-600 text-white py-2 rounded">Giriş Yap</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- SOCKET.IO -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
 
+    function showPage(pageId) {
+      document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+      document.getElementById(pageId).classList.remove("hidden");
+    }
+
+    // Canvas setup
     const canvas = document.getElementById("board");
     const ctx = canvas.getContext("2d");
 
-    const WIDTH = 50, HEIGHT = 50;
-    const PIXEL_SIZE = 10;
+    const WIDTH = 500, HEIGHT = 500;   // sunucudaki boyut
+    const PIXEL_SIZE = 5;                // gerçek pikseller 1x1 olacak
+    let scale = 1;                       // zoom için
+    let offsetX = 0, offsetY = 0;        // kaydırma için
+    let isDragging = false, startX, startY;
 
-    // Canvas başlat
-    socket.on("init", (board) => {
+    // Tarayıcı boyutuna ayarla
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Canvas datası (başlangıçta boş)
+    let board = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill("#FFFFFF"));
+
+    // Sunucudan gelen ilk veri
+    socket.on("init", (serverBoard) => {
+      board = serverBoard;
+      draw();
+    });
+
+    // Pixel güncellemesi
+    socket.on("updatePixel", ({ x, y, color }) => {
+      board[y][x] = color;
+      drawPixel(x, y, color);
+    });
+
+    // Çizim fonksiyonu (tüm board'u çiz)
+    function draw() {
+      ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+      ctx.clearRect(-offsetX / scale, -offsetY / scale, canvas.width / scale, canvas.height / scale);
+
       for (let y = 0; y < HEIGHT; y++) {
         for (let x = 0; x < WIDTH; x++) {
           ctx.fillStyle = board[y][x];
-          ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+          ctx.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE);
         }
+      }
+    }
+
+    // Tek pixel çiz
+    function drawPixel(x, y, color) {
+      ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, PIXEL_SIZE, PIXEL_SIZE);
+    }
+
+    // Canvas tıklama → pixel yerleştirme
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+
+      // scale ve translate’i CSS transform ile uyguluyoruz
+      // o yüzden offsetX/Y mouse hesaplamasına dahil edilmez
+      const mouseX = (e.clientX - rect.left) / scale;
+      const mouseY = (e.clientY - rect.top) / scale;
+
+      const x = Math.floor(mouseX);
+      const y = Math.floor(mouseY);
+
+      if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+        const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
+        socket.emit("placePixel", { x, y, color });
       }
     });
 
-    // Pixel güncelleme
-    socket.on("updatePixel", ({ x, y, color }) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-    });
 
-    // Mouse tıklaması ile pixel değiştirme
-    canvas.addEventListener("click", (e) => {
+    // Zoom (mouse wheel)
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+
+      // Fare konumu container içinde
       const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) / PIXEL_SIZE);
-      const y = Math.floor((e.clientY - rect.top) / PIXEL_SIZE);
-      const color = "#" + Math.floor(Math.random()*16777215).toString(16); // rastgele renk
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-      socket.emit("placePixel", { x, y, color });
+      const prevScale = scale;
+
+      if (e.deltaY < 0) {
+        scale *= zoomFactor; // zoom in
+      } else {
+        scale /= zoomFactor; // zoom out
+      }
+
+      // Pan’i mouse pozisyonuna göre koru
+      offsetX -= (mouseX / prevScale - mouseX / scale);
+      offsetY -= (mouseY / prevScale - mouseY / scale);
+
+      updateTransform();
     });
+
+    // Pan (drag)
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startX = e.clientX - offsetX;
+      startY = e.clientY - offsetY;
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        offsetX = e.clientX - startX;
+        offsetY = e.clientY - startY;
+        updateTransform();
+      }
+    });
+
+    canvas.addEventListener("mouseup", () => isDragging = false);
+    canvas.addEventListener("mouseleave", () => isDragging = false);
+
+    // CSS transform ile zoom/pan uygula
+    function updateTransform() {
+      canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+      canvas.style.transformOrigin = "0 0";
+    }
+
+    // Canvas boyutu ekran boyutuna eşit
+    canvas.width = 1000; // board piksel sayısı
+    canvas.height = 1000;
+    canvas.style.width = canvas.width + "px";
+    canvas.style.height = canvas.height + "px";
   </script>
 </body>
+
 </html>

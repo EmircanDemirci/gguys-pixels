@@ -11,8 +11,8 @@ const io = new Server(server);
 const PORT = 3000;
 
 //canvas boyutu
-const WIDTH = 50;
-const HEIGHT = 50;
+const WIDTH = 500;
+const HEIGHT = 500;
 
 //boş canvas
 let canvas = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill("#FFFFFF"));
