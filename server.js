@@ -1,44 +1,45 @@
+const path = require("path");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-//PORT
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-//canvas boyutu
+// Canvas size
 const WIDTH = 500;
 const HEIGHT = 500;
 
-//boş canvas
-let canvas = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill("#FFFFFF"));
+// Initialize empty canvas (2D array of hex colors)
+let canvas = Array.from({ length: HEIGHT }, () => Array.from({ length: WIDTH }, () => "#FFFFFF"));
 
-//Static dosyaları
-app.use(express.static("public"));
+// Serve static files
+app.use(express.static(path.join(__dirname, "public")));
 
-//Client bağlandığında
 io.on("connection", (socket) => {
-    console.log("Yeni kullanıcı bağlandı!");
+  console.log("Yeni kullanıcı bağlandı!");
 
-    //kullanıcıya mevcut canvas gösteriliyor
-    socket.emit("init", canvas);
+  // Send current canvas to the new client
+  socket.emit("init", canvas);
 
-    //Kullanıcı pixel değiştirdiğinde
-    socket.on("placePixel", ({ x, y, color }) => {
-        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
-            canvas[y][x] = color;
-            // Herkese güncelleme yay
-            io.emit("updatePixel", { x, y, color });
-        }
-    });
+  // Handle pixel placement
+  socket.on("placePixel", ({ x, y, color }) => {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+    if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) return;
+    if (typeof color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(color)) return;
 
+    canvas[y][x] = color;
+    io.emit("updatePixel", { x, y, color });
+  });
 
-})
+  socket.on("disconnect", () => {
+    console.log("Kullanıcı ayrıldı");
+  });
+});
 
 server.listen(PORT, () => {
-    console.log(`Server çalışıyor: http://localhost:${PORT}`);
+  console.log(`Server çalışıyor: http://localhost:${PORT}`);
 });
