@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>rPixels</title>
+  <style>
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    canvas { border: 1px solid #fff; image-rendering: pixelated; cursor: crosshair; }
+  </style>
+</head>
+<body>
+  <canvas id="board" width="500" height="500"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+
+    const WIDTH = 50, HEIGHT = 50;
+    const PIXEL_SIZE = 10;
+
+    // Canvas başlat
+    socket.on("init", (board) => {
+      for (let y = 0; y < HEIGHT; y++) {
+        for (let x = 0; x < WIDTH; x++) {
+          ctx.fillStyle = board[y][x];
+          ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+        }
+      }
+    });
+
+    // Pixel güncelleme
+    socket.on("updatePixel", ({ x, y, color }) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+    });
+
+    // Mouse tıklaması ile pixel değiştirme
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / PIXEL_SIZE);
+      const y = Math.floor((e.clientY - rect.top) / PIXEL_SIZE);
+      const color = "#" + Math.floor(Math.random()*16777215).toString(16); // rastgele renk
+
+      socket.emit("placePixel", { x, y, color });
+    });
+  </script>
+</body>
+</html>
