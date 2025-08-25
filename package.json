@@ -19,7 +19,9 @@
   "homepage": "https://github.com/EmircanDemirci/gguys-pixels#readme",
   "description": "",
   "dependencies": {
+    "body-parser": "^2.2.0",
     "express": "^5.1.0",
+    "iyzipay": "^2.0.64",
     "socket.io": "^4.8.1"
   }
 }
